@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sui Recurring Payment Protocol
 
-## Getting Started
+A subscription-based payment protocol built on the Sui blockchain that enables automatic recurring payments for web3 services.
 
-First, run the development server:
+## Project Overview
+
+The Recurring Payment Protocol solves a critical Web2-to-Web3 gap by enabling subscription-based payments on Sui blockchain. It allows users to authorize recurring payments to service providers without manually executing transactions for each billing cycle.
+
+## Key Features
+
+1. Subscription creation with customizable intervals (weekly, monthly, quarterly, yearly)
+2. Auto-payment execution through a permissioned protocol
+3. Subscription management dashboard for users
+4. Analytics for merchants
+5. Pause/resume subscription functionality
+6. Trial period options for merchants
+
+## Project Structure
+
+- `/subscription_protocol`: Smart contracts written in Move
+  - `/sources`: Contract source code
+  - `/tests`: Test files for contracts
+- `/frontend`: Web interface for the protocol
+
+## Development Setup
+
+### Prerequisites
+
+- Sui CLI
+- Move language toolchain
+- Node.js/React for frontend
+
+### Installation
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Install Sui CLI
+cargo install --locked --git https://github.com/MystenLabs/sui.git --branch main sui
+
+# Build the Move package
+cd subscription_protocol
+sui move build
+
+# Run tests
+sui move test
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## License
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT 
