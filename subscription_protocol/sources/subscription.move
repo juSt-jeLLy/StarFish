@@ -10,6 +10,7 @@ module subscription_protocol::subscription {
     const ENotAuthorized: u64 = 1;
     const EInactiveSubscription: u64 = 2;
     const EInsufficientPayment: u64 = 3;
+    const ENoPaymentDue: u64 = 4;
     
     // Define subscription status
     struct SubscriptionStatus has drop, copy {
@@ -28,6 +29,8 @@ module subscription_protocol::subscription {
         next_payment_time: u64,
         created_at: u64,
         status: SubscriptionStatus,
+        last_payment_time: u64,
+        payment_count: u64,
     }
     
     // Create a new subscription
@@ -56,6 +59,8 @@ module subscription_protocol::subscription {
             next_payment_time: current_time + interval_secs,
             created_at: current_time,
             status,
+            last_payment_time: 0,
+            payment_count: 0,
         };
         
         transfer::share_object(subscription);
@@ -72,7 +77,10 @@ module subscription_protocol::subscription {
         assert!(tx_context::sender(ctx) == subscription.subscriber, ENotAuthorized);
         
         // Verify subscription is active
-        assert!(subscription.status.active && !subscription.status.paused, EInactiveSubscription);
+        assert!(is_active(subscription), EInactiveSubscription);
+        
+        // Verify payment is due
+        assert!(is_payment_due(subscription, clock), ENoPaymentDue);
         
         // Verify payment amount
         assert!(coin::value(&payment) >= subscription.amount, EInsufficientPayment);
@@ -80,9 +88,11 @@ module subscription_protocol::subscription {
         // Send payment to merchant
         transfer::public_transfer(payment, subscription.merchant);
         
-        // Update next payment time
+        // Update subscription state
         let current_time = clock::timestamp_ms(clock) / 1000;
+        subscription.last_payment_time = current_time;
         subscription.next_payment_time = current_time + subscription.interval_secs;
+        subscription.payment_count = subscription.payment_count + 1;
     }
     
     // Pause subscription
@@ -148,5 +158,10 @@ module subscription_protocol::subscription {
     public fun is_payment_due(subscription: &Subscription, clock: &Clock): bool {
         let current_time = clock::timestamp_ms(clock) / 1000;
         current_time >= subscription.next_payment_time && is_active(subscription)
+    }
+    
+    // Get payment history details
+    public fun get_payment_history(subscription: &Subscription): (u64, u64) {
+        (subscription.payment_count, subscription.last_payment_time)
     }
 } 

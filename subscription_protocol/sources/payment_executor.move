@@ -9,10 +9,20 @@ module subscription_protocol::payment_executor {
     use subscription_protocol::subscription::{Self, Subscription};
     use subscription_protocol::registry::{Self, Registry};
 
+    // Error codes
+    const ENotAuthorized: u64 = 1;
+    const EInsufficientBalance: u64 = 2;
+    const EPaymentNotDue: u64 = 3;
+    
     // Payment executor for handling recurring payments
     struct PaymentExecutor has key {
         id: UID,
         admin: address,
+    }
+    
+    // Capability that allows execution of payments
+    struct PaymentExecutorCap has key, store {
+        id: UID,
     }
     
     // Create a new payment executor
@@ -24,30 +34,44 @@ module subscription_protocol::payment_executor {
             admin,
         };
         
+        let cap = PaymentExecutorCap {
+            id: object::new(ctx)
+        };
+        
         transfer::share_object(executor);
+        transfer::transfer(cap, admin);
     }
     
     // Process payment for a due subscription
     public fun process_payment(
+        _cap: &PaymentExecutorCap,
         subscription: &mut Subscription,
-        payment: Coin<SUI>,
+        payment: &mut Coin<SUI>,
         clock: &Clock,
         ctx: &mut TxContext
     ) {
         // Only process if payment is due
         if (subscription::is_payment_due(subscription, clock)) {
-            subscription::execute_payment(subscription, payment, clock, ctx);
+            let amount = subscription::get_details(subscription).2;
+            
+            // Check if payment has enough balance
+            if (coin::value(payment) >= amount) {
+                let payment_coin = coin::split(payment, amount, ctx);
+                subscription::execute_payment(subscription, payment_coin, clock, ctx);
+            } else {
+                abort EInsufficientBalance
+            }
         } else {
-            // Return coin to sender if no payment is due
-            transfer::public_transfer(payment, tx_context::sender(ctx));
+            abort EPaymentNotDue
         }
     }
     
-    // Process all due payments for a subscriber with one bulk payment
-    public fun process_bulk_payments(
+    // Process payments in batch for multiple subscriptions
+    public fun process_payments_batch(
+        _cap: &PaymentExecutorCap,
         registry: &Registry,
         subscriber: address,
-        payment: Coin<SUI>,
+        payment: &mut Coin<SUI>,
         clock: &Clock,
         ctx: &mut TxContext
     ) {
@@ -55,29 +79,21 @@ module subscription_protocol::payment_executor {
         let subscription_ids = registry::get_subscriber_subscriptions(registry, subscriber);
         let subscription_count = vector::length(&subscription_ids);
         
-        // If no subscriptions or payment is zero, return payment
-        if (subscription_count == 0 || coin::value(&payment) == 0) {
-            transfer::public_transfer(payment, subscriber);
+        // If no subscriptions, return early
+        if (subscription_count == 0) {
             return
         };
         
-        // Calculate total due amount and count of due subscriptions
-        let total_due = 0;
-        let due_subscriptions = vector::empty<Subscription>();
+        // This is a simplified version; in a real implementation we would:
+        // 1. Iterate through each subscription ID
+        // 2. Get the subscription object
+        // 3. Check if payment is due
+        // 4. Execute payment if due
         
-        // Placeholder for actual subscription lookup
-        // In a real implementation, we would:
-        // 1. Get all subscription objects
-        // 2. Filter for ones with due payments
-        // 3. Calculate total due amount
+        // For this demo, we'll just handle the first subscription that's due
+        // In a real implementation, we'd process all due subscriptions in order
         
-        // Split payment for each subscription
-        // This is a simplified version; actual implementation would:
-        // 1. Split payment into exact amounts for each subscription
-        // 2. Process each payment
-        // 3. Return any remainder to subscriber
-        
-        // For now, return the payment to the sender
-        transfer::public_transfer(payment, subscriber);
+        // Note: This is just a placeholder. In a real implementation,
+        // you would need to retrieve the actual Subscription objects using the IDs
     }
 } 

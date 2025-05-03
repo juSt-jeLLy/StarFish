@@ -47,6 +47,11 @@ module subscription_protocol::subscription_tests {
             assert!(active == true, 0);
             assert!(paused == false, 0);
             
+            // Verify payment history
+            let (payment_count, last_payment_time) = subscription::get_payment_history(&subscription);
+            assert!(payment_count == 0, 0);
+            assert!(last_payment_time == 0, 0);
+            
             ts::return_shared(subscription);
         };
         
@@ -95,6 +100,11 @@ module subscription_protocol::subscription_tests {
             // Verify next payment time was updated
             let (_, _, _, _, next_payment_time, _, _) = subscription::get_details(&subscription);
             assert!(next_payment_time == 1000 + 86401 + 86400, 0); // initial + advance + interval
+            
+            // Verify payment history
+            let (payment_count, last_payment_time) = subscription::get_payment_history(&subscription);
+            assert!(payment_count == 1, 0);
+            assert!(last_payment_time == 1000 + 86401, 0);
             
             ts::return_shared(subscription);
         };
