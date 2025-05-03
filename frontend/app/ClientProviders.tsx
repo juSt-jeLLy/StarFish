@@ -15,11 +15,17 @@ const networks = {
   mainnet: { url: getFullnodeUrl('mainnet') },
 };
 
+// Note: Get a project ID from https://cloud.walletconnect.com/
+const walletConnectId = "2d00473ab5dd7beda8d72036d79a260f";
+
 export default function ClientProviders({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <SuiClientProvider networks={networks} defaultNetwork="devnet">
-        <WalletProvider autoConnect>
+        <WalletProvider 
+          autoConnect
+          enableUnsafeBurner
+        >
           {children}
         </WalletProvider>
       </SuiClientProvider>

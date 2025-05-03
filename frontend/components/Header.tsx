@@ -2,15 +2,6 @@
 
 import Link from 'next/link';
 import { ConnectButton } from '@mysten/dapp-kit';
-import ClientProviders from '../app/ClientProviders';
-
-const WalletConnect = () => {
-  return (
-    <ClientProviders>
-      <ConnectButton />
-    </ClientProviders>
-  );
-};
 
 const Header = () => {
   return (
@@ -38,7 +29,7 @@ const Header = () => {
         </nav>
         
         <div className="flex items-center">
-          <WalletConnect />
+          <ConnectButton />
         </div>
       </div>
     </header>
