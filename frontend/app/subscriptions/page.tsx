@@ -5,6 +5,11 @@ import { useCurrentWallet, useSuiClient } from '@mysten/dapp-kit';
 import ClientProviders from '../ClientProviders';
 import { getSubscriptionsForSubscriber, pauseSubscription, resumeSubscription, cancelSubscription, SubscriptionData } from '../../services/contractService';
 import { formatIntervalFromSeconds, formatDateFromTimestamp } from '../../utils/timeUtils';
+import { isSlushWallet } from '../../services/slushWalletAdapter';
+import { debugWalletCapabilities } from '../../services/debugWallet';
+import { getNetworkInfo } from '../../services/networkHelper';
+import { useWallet } from '../../services/walletContext';
+import { setupWalletConnectionListener, isWalletConnected, getStoredWalletAddress } from '../../utils/walletEvents';
 
 // We'll use the wallet adapter instead of a mock keypair
 // The wallet adapter will handle signing through the connected wallet
@@ -12,59 +17,139 @@ import { formatIntervalFromSeconds, formatDateFromTimestamp } from '../../utils/
 function SubscriptionsContent() {
   const { currentWallet } = useCurrentWallet();
   const suiClient = useSuiClient();
-  const connected = !!currentWallet;
+  const { isConnected, walletAddress: contextWalletAddress } = useWallet();
+  
+  // We combine context and direct wallet state for maximum reliability
+  const connected = isConnected || !!currentWallet;
+  
   const [subscriptions, setSubscriptions] = useState<SubscriptionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [isSlush, setIsSlush] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+
+  // Check wallet type and set up info
+  useEffect(() => {
+    if (currentWallet && currentWallet.accounts && currentWallet.accounts.length > 0) {
+      const address = currentWallet.accounts[0].address;
+      setWalletAddress(address);
+      
+      // Check if it's a Slush wallet
+      const slushDetected = isSlushWallet(currentWallet);
+      setIsSlush(slushDetected);
+      
+      // Get debug info
+      const debug = debugWalletCapabilities(currentWallet);
+      setDebugInfo(debug);
+      console.log('Wallet debug info:', debug);
+      
+      // Log network info
+      const networkInfo = getNetworkInfo();
+      console.log('Network info:', networkInfo);
+    } else if (contextWalletAddress) {
+      // If wallet isn't directly available but we have an address in context, use that
+      setWalletAddress(contextWalletAddress);
+      setIsSlush(false);
+    } else if (isWalletConnected()) {
+      // Last resort: check local storage
+      const storedAddress = getStoredWalletAddress();
+      if (storedAddress) {
+        setWalletAddress(storedAddress);
+        console.log('Using wallet address from localStorage:', storedAddress);
+      } else {
+        setWalletAddress(null);
+        setIsSlush(false);
+        setDebugInfo(null);
+      }
+    } else {
+      setWalletAddress(null);
+      setIsSlush(false);
+      setDebugInfo(null);
+    }
+  }, [currentWallet, contextWalletAddress]);
+
+  // Set up wallet connection change listener
+  useEffect(() => {
+    // Function to reload the subscriptions
+    const reloadSubscriptions = async () => {
+      if (!walletAddress) return;
+      
+      try {
+        setLoading(true);
+        setError(null);
+        console.log(`Reloading subscriptions for address: ${walletAddress}`);
+        
+        const fetchedSubscriptions = await getSubscriptionsForSubscriber(
+          suiClient,
+          walletAddress
+        );
+        
+        console.log('Fetched subscriptions after wallet event:', fetchedSubscriptions);
+        setSubscriptions(fetchedSubscriptions);
+      } catch (err: any) {
+        console.error('Error fetching subscriptions after wallet event:', err);
+        setError(`Failed to load your subscriptions. ${err.message || 'Please try again.'}`);
+        setSubscriptions([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    // Set up the event listener
+    const cleanup = setupWalletConnectionListener(reloadSubscriptions);
+    
+    return cleanup;
+  }, [suiClient, walletAddress]);
 
   // Fetch subscriptions
   useEffect(() => {
     async function fetchSubscriptions() {
-      if (!connected || !currentWallet) {
-        setLoading(false);
-        return;
-      }
-      
-      if (!currentWallet.accounts || currentWallet.accounts.length === 0) {
-        setError('No account found in wallet. Please reconnect your wallet.');
+      if (!walletAddress) {
         setLoading(false);
         return;
       }
       
       try {
         setLoading(true);
-        const fetchedSubscriptions = await getSubscriptionsForSubscriber(
-          suiClient,
-          currentWallet.accounts[0].address
-        );
-        setSubscriptions(fetchedSubscriptions);
-      } catch (err) {
+        setError(null);
+        console.log(`Fetching subscriptions for address: ${walletAddress}`);
+        
+        // Wrap in try/catch to get better error info
+        try {
+          const fetchedSubscriptions = await getSubscriptionsForSubscriber(
+            suiClient,
+            walletAddress
+          );
+          
+          console.log('Fetched subscriptions:', fetchedSubscriptions);
+          setSubscriptions(fetchedSubscriptions);
+        } catch (fetchError: any) {
+          console.error('Error in subscription fetch:', fetchError);
+          throw new Error(`Failed to fetch subscriptions: ${fetchError.message}`);
+        }
+      } catch (err: any) {
         console.error('Error fetching subscriptions:', err);
-        setError('Failed to load your subscriptions. Please try again.');
+        setError(`Failed to load your subscriptions. ${err.message || 'Please try again.'}`);
+        setSubscriptions([]);
       } finally {
         setLoading(false);
       }
     }
 
     fetchSubscriptions();
-  }, [currentWallet, connected, suiClient]);
+  }, [walletAddress, suiClient]);
 
-  // Reload data when wallet connects
-  useEffect(() => {
-    if (connected && currentWallet?.accounts?.length > 0) {
-      setLoading(true);
-      setError(null);
+  // Show wallet debugging information
+  const handleShowDebugInfo = () => {
+    if (debugInfo) {
+      alert(debugInfo);
     }
-  }, [connected, currentWallet]);
+  };
 
   const handlePauseSubscription = async (subscriptionId: string) => {
     if (!connected || !currentWallet) return;
-    
-    if (!currentWallet.accounts || currentWallet.accounts.length === 0) {
-      setError('No account found in wallet. Please reconnect your wallet.');
-      return;
-    }
     
     try {
       setActionInProgress(subscriptionId);
@@ -84,9 +169,9 @@ function SubscriptionsContent() {
             : sub
         )
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error pausing subscription:', err);
-      setError('Failed to pause subscription. Please try again.');
+      setError(`Failed to pause subscription. ${err.message || 'Please try again.'}`);
     } finally {
       setActionInProgress(null);
     }
@@ -100,7 +185,7 @@ function SubscriptionsContent() {
       
       await resumeSubscription(
         suiClient,
-        currentWallet, // Use currentWallet instead of mockKeypair
+        currentWallet,
         subscriptionId
       );
       
@@ -112,9 +197,9 @@ function SubscriptionsContent() {
             : sub
         )
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error resuming subscription:', err);
-      setError('Failed to resume subscription. Please try again.');
+      setError(`Failed to resume subscription. ${err.message || 'Please try again.'}`);
     } finally {
       setActionInProgress(null);
     }
@@ -128,15 +213,15 @@ function SubscriptionsContent() {
       
       await cancelSubscription(
         suiClient,
-        currentWallet, // Use currentWallet instead of mockKeypair
+        currentWallet,
         subscriptionId
       );
       
       // Remove subscription from UI
       setSubscriptions(prev => prev.filter(sub => sub.id !== subscriptionId));
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error cancelling subscription:', err);
-      setError('Failed to cancel subscription. Please try again.');
+      setError(`Failed to cancel subscription. ${err.message || 'Please try again.'}`);
     } finally {
       setActionInProgress(null);
     }
@@ -159,6 +244,26 @@ function SubscriptionsContent() {
   return (
     <div className="container mx-auto px-4 py-10">
       <h1 className="text-3xl font-bold mb-6 text-center">My Subscriptions</h1>
+      
+      {/* Wallet connection info */}
+      <div className={`mb-6 p-4 rounded-lg ${isSlush ? 'bg-purple-50 border border-purple-200' : 'bg-blue-50 border border-blue-200'}`}>
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="font-medium text-gray-800">
+              Connected wallet: {isSlush ? 'Slush Wallet' : currentWallet?.name || 'Unknown'}
+            </p>
+            <p className="text-sm text-gray-600 truncate">
+              Address: {walletAddress || 'Not available'}
+            </p>
+          </div>
+          <button
+            onClick={handleShowDebugInfo}
+            className="px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded text-gray-800"
+          >
+            Debug Wallet
+          </button>
+        </div>
+      </div>
       
       {error && (
         <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-6">

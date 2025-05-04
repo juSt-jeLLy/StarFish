@@ -21,17 +21,17 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <ClientProviders>
-          <div className="min-h-screen flex flex-col">
-            <Header />
-            <main className="flex-grow">
-              {children}
-            </main>
-            <footer className="bg-gray-800 text-white py-4">
-              <div className="container mx-auto text-center">
-                <p>© 2023 Sui Recurring Payments Protocol</p>
-              </div>
-            </footer>
-          </div>
+        <div className="min-h-screen flex flex-col">
+          <Header />
+          <main className="flex-grow">
+            {children}
+          </main>
+          <footer className="bg-gray-800 text-white py-4">
+            <div className="container mx-auto text-center">
+              <p>© 2023 Sui Recurring Payments Protocol</p>
+            </div>
+          </footer>
+        </div>
         </ClientProviders>
       </body>
     </html>

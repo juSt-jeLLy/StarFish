@@ -4,21 +4,21 @@
  * @returns The interval in seconds
  */
 export function convertIntervalToSeconds(interval: string): number {
-  const day = 24 * 60 * 60; // seconds in a day
-  
-  switch (interval) {
+  switch (interval.toLowerCase()) {
+    case 'hourly':
+      return 3600; // 60 * 60
     case 'daily':
-      return day;
+      return 86400; // 24 * 60 * 60
     case 'weekly':
-      return 7 * day;
+      return 604800; // 7 * 24 * 60 * 60
     case 'monthly':
-      return 30 * day;
+      return 2592000; // 30 * 24 * 60 * 60 (approximation)
     case 'quarterly':
-      return 90 * day;
+      return 7776000; // 90 * 24 * 60 * 60 (approximation)
     case 'yearly':
-      return 365 * day;
+      return 31536000; // 365 * 24 * 60 * 60 (approximation)
     default:
-      return 30 * day; // default to monthly
+      return 2592000; // Default to monthly if unknown
   }
 }
 
@@ -48,11 +48,28 @@ export function getNextPaymentDate(intervalInSeconds: number): number {
  * @returns Human-readable interval (e.g., 'daily', 'weekly', etc.)
  */
 export function formatIntervalFromSeconds(seconds: number): string {
-  const days = seconds / 86400;
-  if (days === 1) return 'daily';
-  if (days === 7) return 'weekly';
-  if (days >= 28 && days <= 31) return 'monthly';
-  if (days >= 90 && days <= 92) return 'quarterly';
-  if (days >= 365 && days <= 366) return 'yearly';
-  return `${days} days`;
+  if (!seconds || isNaN(seconds)) return 'unknown';
+
+  // Define thresholds for different intervals
+  const HOUR = 3600;
+  const DAY = 86400;
+  const WEEK = 604800;
+  const MONTH = 2592000; // Approximate
+  const QUARTER = 7776000; // Approximate
+  const YEAR = 31536000; // Approximate
+
+  // Find the closest interval
+  if (seconds <= HOUR * 1.5) {
+    return 'hourly';
+  } else if (seconds <= DAY * 1.5) {
+    return 'daily';
+  } else if (seconds <= WEEK * 1.5) {
+    return 'weekly';
+  } else if (seconds <= MONTH * 1.5) {
+    return 'monthly';
+  } else if (seconds <= QUARTER * 1.5) {
+    return 'quarterly';
+  } else {
+    return 'yearly';
+  }
 } 

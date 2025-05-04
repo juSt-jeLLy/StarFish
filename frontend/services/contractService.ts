@@ -1,6 +1,7 @@
 import { SuiClient } from '@mysten/sui/client';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
 import type { WalletAccount } from '@mysten/wallet-standard';
+import { isSlushWallet, executeSlushTransaction } from './slushWalletAdapter';
 
 // Replace with your actual contract IDs after deployment
 const PACKAGE_ID = '0x177d14d5f5ac73f35fef5c9667566a0d8947386b59c93f1aa3219299e68ba381'; // Replace with your deployed package ID
@@ -19,7 +20,7 @@ export interface SubscriptionData {
 }
 
 /**
- * Validates that wallet is connected before executing a transaction
+ * Basic wallet validation (account exists)
  */
 function validateWallet(wallet: any): void {
   if (!wallet) {
@@ -29,9 +30,80 @@ function validateWallet(wallet: any): void {
   if (!wallet.accounts || wallet.accounts.length === 0) {
     throw new Error('No account found in wallet. Please connect your wallet properly.');
   }
+}
+
+/**
+ * Executes a transaction using the connected wallet - handles various wallet implementations
+ */
+async function executeTransaction(wallet: any, tx: TransactionBlock, options = { showEffects: true, showObjectChanges: true }) {
+  validateWallet(wallet);
   
-  if (!wallet.signAndExecuteTransactionBlock) {
-    throw new Error('Wallet does not support transaction signing. Please use a compatible wallet.');
+  // Check if it's Slush wallet first
+  if (isSlushWallet(wallet)) {
+    console.log('Detected Slush wallet, using Slush adapter');
+    return executeSlushTransaction(wallet, tx, options);
+  }
+  
+  // Get supported features from wallet
+  const walletName = wallet.name || 'Unknown Wallet';
+  console.log(`Using wallet: ${walletName}`);
+  
+  if (wallet.accounts && wallet.accounts.length > 0) {
+    console.log(`Wallet address: ${wallet.accounts[0].address}`);
+  }
+  
+  // Log available methods on the wallet
+  const methods = Object.getOwnPropertyNames(wallet)
+    .filter(prop => typeof wallet[prop] === 'function')
+    .join(', ');
+  console.log(`Wallet methods: ${methods}`);
+  
+  // Different wallets have different interfaces for signing transactions
+  try {
+    // For Sui Wallet and most standard wallets
+    if (typeof wallet.signAndExecuteTransactionBlock === 'function') {
+      console.log('Using standard signAndExecuteTransactionBlock method');
+      const result = await wallet.signAndExecuteTransactionBlock({
+        transactionBlock: tx,
+        options,
+      });
+      console.log('Transaction signed and executed successfully');
+      return result;
+    }
+    
+    // For wallets with custom adapters
+    else if (wallet.adapter && typeof wallet.adapter.signAndExecuteTransaction === 'function') {
+      console.log('Using adapter.signAndExecuteTransaction method');
+      const result = await wallet.adapter.signAndExecuteTransaction(tx);
+      console.log('Transaction signed and executed successfully via adapter');
+      return result;
+    }
+    
+    // For wallets that expose signTransaction
+    else if (typeof wallet.signTransaction === 'function') {
+      console.log('Using signTransaction method');
+      const result = await wallet.signTransaction(tx);
+      console.log('Transaction signed successfully');
+      return result;
+    }
+    
+    // If none of these methods exist, wallet isn't compatible
+    throw new Error(`Wallet ${walletName} doesn't support any known transaction signing methods. Available methods: ${methods}`);
+  } catch (error: any) {
+    console.error('Transaction signing error:', error);
+    
+    // Try to extract useful information from the error
+    let errorMessage = error.message || 'Unknown error';
+    
+    if (error.code) {
+      console.error(`Error code: ${error.code}`);
+    }
+    
+    if (error.data) {
+      console.error('Error data:', error.data);
+    }
+    
+    throw new Error(`Failed to sign transaction with ${walletName}: ${errorMessage}`);
   }
 }
 
@@ -46,32 +118,56 @@ export async function createSubscription(
   intervalSecs: number
 ) {
   try {
-    // Validate wallet connection
-    validateWallet(wallet);
+    console.log('Creating subscription with the following parameters:');
+    console.log(`- Package ID: ${PACKAGE_ID}`);
+    console.log(`- Registry ID: ${REGISTRY_ID} (not used directly in function call)`);
+    console.log(`- Merchant Address: ${merchantAddress}`);
+    console.log(`- Amount (MIST): ${amount}`);
+    console.log(`- Amount (SUI): ${amount / 1_000_000_000}`);
+    console.log(`- Interval (seconds): ${intervalSecs}`);
+    console.log(`- Wallet:`, wallet ? wallet.name : 'Unknown');
     
+    // Validate merchant address format
+    if (!merchantAddress || !merchantAddress.startsWith('0x')) {
+      throw new Error('Invalid merchant address format. It must start with 0x');
+    }
+    
+    // Make sure amount is a positive number
+    if (amount <= 0) {
+      throw new Error('Amount must be greater than 0');
+    }
+
+    // Create transaction block
     const tx = new TransactionBlock();
+    console.log('Building transaction block...');
     
-    // Call the create_subscription function
+    // Call the create_subscription function with the correct parameters
+    // Based on contract inspection, the function expects:
+    // merchant_address, amount, interval_secs, clock
     tx.moveCall({
       target: `${PACKAGE_ID}::subscription::create_subscription`,
       arguments: [
-        tx.pure(merchantAddress),
-        tx.pure(amount),
-        tx.pure(intervalSecs),
-        tx.object('0x6'), // Clock object
+        tx.pure(merchantAddress),    // Merchant address
+        tx.pure(amount),             // Amount (as a number, not a coin object)
+        tx.pure(intervalSecs),       // Interval in seconds
+        tx.object('0x6'),            // Clock object
       ],
     });
     
-    // First sign the transaction with the wallet
-    const signedTx = await wallet.signAndExecuteTransactionBlock({
-      transactionBlock: tx,
-      options: {
-        showEffects: true,
-        showObjectChanges: true,
-      },
-    });
+    console.log('Transaction block built successfully');
+    console.log('Executing transaction...');
     
-    return signedTx;
+    // Use our universal transaction execution function
+    const result = await executeTransaction(wallet, tx);
+    
+    console.log('Transaction executed successfully:', result);
+    
+    // Check for key properties in the result
+    if (!result.digest) {
+      console.warn('Transaction result missing digest. This may indicate an issue:', result);
+    }
+    
+    return result;
   } catch (error) {
     console.error('Error creating subscription:', error);
     throw error;
@@ -85,24 +181,59 @@ export async function getSubscriptionsForSubscriber(
   suiClient: SuiClient,
   subscriberAddress: string
 ) {
+  if (!subscriberAddress) {
+    throw new Error('Subscriber address is required');
+  }
+  
+  console.log(`Fetching subscriptions for subscriber: ${subscriberAddress}`);
+  console.log(`Using package ID: ${PACKAGE_ID}`);
+  
   try {
-    // This will need to be implemented based on your registry structure
-    // For MVP, you may need to directly query objects owned by the subscriber
+    // Query objects owned by the subscriber
+    console.log('Querying owned objects...');
+    const objectType = `${PACKAGE_ID}::subscription::Subscription`;
+    console.log(`Looking for objects of type: ${objectType}`);
+    
     const subscriptions = await suiClient.getOwnedObjects({
       owner: subscriberAddress,
       filter: {
-        StructType: `${PACKAGE_ID}::subscription::Subscription`
+        StructType: objectType
       },
       options: {
         showContent: true,
         showType: true,
       }
     });
-
-    return subscriptions.data.map(sub => formatSubscriptionData(sub));
-  } catch (error) {
-    console.error('Error fetching subscriptions:', error);
-    throw error;
+    
+    console.log(`Found ${subscriptions.data.length} subscription objects`);
+    
+    // If no subscriptions found, return empty array
+    if (!subscriptions.data || subscriptions.data.length === 0) {
+      console.log('No subscriptions found for this address');
+      return [];
+    }
+    
+    // Map the raw data to our subscription interface
+    const formattedSubscriptions = subscriptions.data.map(sub => {
+      console.log(`Processing subscription: ${sub.data?.objectId}`);
+      return formatSubscriptionData(sub);
+    });
+    
+    console.log('Formatted subscriptions:', formattedSubscriptions);
+    return formattedSubscriptions;
+  } catch (error: any) {
+    console.error('Error in getSubscriptionsForSubscriber:', error);
+    
+    // Check for specific error types to provide better error messages
+    if (error.message && error.message.includes('not found')) {
+      throw new Error(`Address ${subscriberAddress} not found. Please check the address and try again.`);
+    }
+    
+    if (error.message && error.message.includes('Invalid digest')) {
+      throw new Error('Network error: Invalid object digest. There might be an issue with the Sui network.');
+    }
+    
+    throw new Error(`Failed to fetch subscriptions: ${error.message || 'Unknown error'}`);
   }
 }
 
@@ -111,7 +242,7 @@ export async function getSubscriptionsForSubscriber(
  */
 export async function executePayment(
   suiClient: SuiClient,
-  wallet: any, // Accept wallet object from dapp-kit
+  wallet: any,
   subscriptionId: string,
   amount: number
 ) {
@@ -131,16 +262,8 @@ export async function executePayment(
       ],
     });
     
-    // Sign and execute with the wallet
-    const result = await wallet.signAndExecuteTransactionBlock({
-      transactionBlock: tx,
-      options: {
-        showEffects: true,
-        showObjectChanges: true,
-      },
-    });
-    
-    return result;
+    // Use our universal transaction execution function
+    return await executeTransaction(wallet, tx);
   } catch (error) {
     console.error('Error executing payment:', error);
     throw error;
@@ -152,7 +275,7 @@ export async function executePayment(
  */
 export async function pauseSubscription(
   suiClient: SuiClient,
-  wallet: any, // Accept wallet object from dapp-kit
+  wallet: any,
   subscriptionId: string
 ) {
   try {
@@ -165,15 +288,8 @@ export async function pauseSubscription(
       ],
     });
     
-    // Sign and execute with the wallet
-    const result = await wallet.signAndExecuteTransactionBlock({
-      transactionBlock: tx,
-      options: {
-        showEffects: true,
-      },
-    });
-    
-    return result;
+    // Use our universal transaction execution function with both options
+    return await executeTransaction(wallet, tx, { showEffects: true, showObjectChanges: true });
   } catch (error) {
     console.error('Error pausing subscription:', error);
     throw error;
@@ -185,7 +301,7 @@ export async function pauseSubscription(
  */
 export async function resumeSubscription(
   suiClient: SuiClient,
-  wallet: any, // Accept wallet object from dapp-kit
+  wallet: any,
   subscriptionId: string
 ) {
   try {
@@ -198,15 +314,8 @@ export async function resumeSubscription(
       ],
     });
     
-    // Sign and execute with the wallet
-    const result = await wallet.signAndExecuteTransactionBlock({
-      transactionBlock: tx,
-      options: {
-        showEffects: true,
-      },
-    });
-    
-    return result;
+    // Use our universal transaction execution function with both options
+    return await executeTransaction(wallet, tx, { showEffects: true, showObjectChanges: true });
   } catch (error) {
     console.error('Error resuming subscription:', error);
     throw error;
@@ -218,7 +327,7 @@ export async function resumeSubscription(
  */
 export async function cancelSubscription(
   suiClient: SuiClient,
-  wallet: any, // Accept wallet object from dapp-kit
+  wallet: any,
   subscriptionId: string
 ) {
   try {
@@ -231,15 +340,8 @@ export async function cancelSubscription(
       ],
     });
     
-    // Sign and execute with the wallet
-    const result = await wallet.signAndExecuteTransactionBlock({
-      transactionBlock: tx,
-      options: {
-        showEffects: true,
-      },
-    });
-    
-    return result;
+    // Use our universal transaction execution function with both options
+    return await executeTransaction(wallet, tx, { showEffects: true, showObjectChanges: true });
   } catch (error) {
     console.error('Error cancelling subscription:', error);
     throw error;
@@ -250,19 +352,51 @@ export async function cancelSubscription(
  * Formats subscription data from chain for UI
  */
 export function formatSubscriptionData(rawData: any): SubscriptionData {
-  // This will need to be implemented based on your actual data structure
-  // For MVP, a simplified version is fine
-  return {
-    id: rawData.objectId,
-    merchantAddress: rawData.content?.fields?.merchant || '',
-    amount: rawData.content?.fields?.amount || '0',
-    token: 'SUI', // Default to SUI for MVP
-    interval: formatInterval(rawData.content?.fields?.interval_secs || 0),
-    nextPayment: formatDate(rawData.content?.fields?.next_payment_time || 0),
-    status: rawData.content?.fields?.status?.active ? 'active' : 'inactive',
-    totalPaid: rawData.content?.fields?.payment_count || '0',
-    remainingPayments: 'N/A', // This might need to be calculated or stored on chain
-  };
+  console.log('Raw subscription data:', rawData);
+  
+  try {
+    // Handle the case where data is in a different format
+    const objectId = rawData.objectId || rawData.data?.objectId || '';
+    
+    // Extract content fields safely
+    const fields = rawData.content?.fields || rawData.data?.content?.fields || {};
+    console.log('Subscription fields:', fields);
+    
+    // Default values if fields are not available
+    const merchantAddress = fields.merchant || fields.merchantAddress || 'Unknown';
+    const amount = fields.amount || '0';
+    const intervalSecs = fields.interval_secs || fields.intervalSecs || 0;
+    const nextPaymentTime = fields.next_payment_time || fields.nextPaymentTime || 0;
+    const isActive = fields.status?.active || fields.isActive || false;
+    const paymentCount = fields.payment_count || fields.paymentCount || '0';
+    
+    return {
+      id: objectId,
+      merchantAddress: merchantAddress,
+      amount: amount.toString(),
+      token: 'SUI', // Default to SUI for MVP
+      interval: formatInterval(parseInt(intervalSecs) || 0),
+      nextPayment: formatDate(parseInt(nextPaymentTime) || 0),
+      status: isActive ? 'active' : 'inactive',
+      totalPaid: paymentCount.toString(),
+      remainingPayments: 'N/A', // This might need to be calculated or stored on chain
+    };
+  } catch (error) {
+    console.error('Error formatting subscription data:', error, rawData);
+    
+    // Return a default object instead of failing
+    return {
+      id: rawData.objectId || 'unknown-id',
+      merchantAddress: 'Error: Could not parse data',
+      amount: '0',
+      token: 'SUI',
+      interval: 'unknown',
+      nextPayment: 'unknown',
+      status: 'inactive',
+      totalPaid: '0',
+      remainingPayments: 'N/A',
+    };
+  }
 }
 
 // Helper function to format interval
@@ -279,5 +413,85 @@ function formatInterval(seconds: number): string {
 // Helper function to format timestamp
 function formatDate(timestamp: number): string {
   if (!timestamp) return 'N/A';
-  return new Date(timestamp * 1000).toISOString().split('T')[0];
+  const date = new Date(timestamp * 1000);
+  return date.toLocaleDateString();
+}
+
+/**
+ * Extracts a subscription ID from transaction results
+ */
+export async function extractSubscriptionId(
+  suiClient: SuiClient,
+  txDigest: string
+): Promise<string | null> {
+  if (!txDigest) {
+    console.error('No transaction digest provided');
+    return null;
+  }
+  
+  try {
+    console.log(`Extracting subscription ID from transaction: ${txDigest}`);
+    
+    // Get transaction details
+    const txData = await suiClient.getTransactionBlock({
+      digest: txDigest,
+      options: {
+        showEffects: true,
+        showEvents: true,
+        showObjectChanges: true,
+      }
+    });
+    
+    // Look for created objects in transaction
+    const createdObjects = txData.objectChanges?.filter(change => 
+      change.type === 'created' && 
+      change.objectType.includes(`${PACKAGE_ID}::subscription::Subscription`)
+    ) || [];
+    
+    if (createdObjects.length > 0) {
+      const createdObject = createdObjects[0] as any; // Cast to any to avoid TypeScript errors
+      console.log(`Found subscription object: ${createdObject.objectId}`);
+      return createdObject.objectId;
+    }
+    
+    console.log('No subscription object found in transaction');
+    return null;
+  } catch (error) {
+    console.error('Error extracting subscription ID:', error);
+    return null;
+  }
+}
+
+/**
+ * Gets a subscription by its ID
+ */
+export async function getSubscriptionById(
+  suiClient: SuiClient,
+  subscriptionId: string
+): Promise<SubscriptionData | null> {
+  if (!subscriptionId) {
+    throw new Error('Subscription ID is required');
+  }
+  
+  try {
+    console.log(`Fetching subscription with ID: ${subscriptionId}`);
+    
+    const subscription = await suiClient.getObject({
+      id: subscriptionId,
+      options: {
+        showContent: true,
+        showType: true,
+      }
+    });
+    
+    if (!subscription.data || !subscription.data.content) {
+      console.log('Subscription not found or has no content');
+      return null;
+    }
+    
+    return formatSubscriptionData(subscription);
+  } catch (error) {
+    console.error('Error fetching subscription by ID:', error);
+    return null;
+  }
 } 
