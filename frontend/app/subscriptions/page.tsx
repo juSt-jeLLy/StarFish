@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useCurrentWallet, useSuiClient } from '@mysten/dapp-kit';
 import ClientProviders from '../ClientProviders';
 import { getSubscriptionsForSubscriber, pauseSubscription, resumeSubscription, cancelSubscription, SubscriptionData } from '../../services/contractService';
-import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 import { formatIntervalFromSeconds, formatDateFromTimestamp } from '../../utils/timeUtils';
 
 // We'll use the wallet adapter instead of a mock keypair
@@ -22,7 +21,16 @@ function SubscriptionsContent() {
   // Fetch subscriptions
   useEffect(() => {
     async function fetchSubscriptions() {
-      if (!connected || !currentWallet) return;
+      if (!connected || !currentWallet) {
+        setLoading(false);
+        return;
+      }
+      
+      if (!currentWallet.accounts || currentWallet.accounts.length === 0) {
+        setError('No account found in wallet. Please reconnect your wallet.');
+        setLoading(false);
+        return;
+      }
       
       try {
         setLoading(true);
@@ -42,8 +50,21 @@ function SubscriptionsContent() {
     fetchSubscriptions();
   }, [currentWallet, connected, suiClient]);
 
+  // Reload data when wallet connects
+  useEffect(() => {
+    if (connected && currentWallet?.accounts?.length > 0) {
+      setLoading(true);
+      setError(null);
+    }
+  }, [connected, currentWallet]);
+
   const handlePauseSubscription = async (subscriptionId: string) => {
     if (!connected || !currentWallet) return;
+    
+    if (!currentWallet.accounts || currentWallet.accounts.length === 0) {
+      setError('No account found in wallet. Please reconnect your wallet.');
+      return;
+    }
     
     try {
       setActionInProgress(subscriptionId);

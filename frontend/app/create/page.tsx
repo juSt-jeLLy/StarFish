@@ -1,17 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { useCurrentWallet, useSuiClient, useWallets } from '@mysten/dapp-kit';
+import { useCurrentWallet, useSuiClient } from '@mysten/dapp-kit';
 import ClientProviders from '../ClientProviders';
 import { createSubscription } from '../../services/contractService';
 import { convertIntervalToSeconds } from '../../utils/timeUtils';
-import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
-import { fromHEX } from '@mysten/sui.js/utils';
 
 function CreateSubscriptionContent() {
   const { currentWallet } = useCurrentWallet();
   const suiClient = useSuiClient();
-  const { signAndExecuteTransactionBlock } = useWallets();
   const connected = !!currentWallet;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txResult, setTxResult] = useState<any>(null);
@@ -37,8 +34,14 @@ function CreateSubscriptionContent() {
     setError(null);
     setTxResult(null);
     
-    if (!currentWallet || !connected || !signAndExecuteTransactionBlock) {
+    if (!currentWallet || !connected) {
       setError('You need to connect your wallet first');
+      setIsSubmitting(false);
+      return;
+    }
+    
+    if (!currentWallet.accounts || currentWallet.accounts.length === 0) {
+      setError('No account found in wallet. Please reconnect your wallet.');
       setIsSubmitting(false);
       return;
     }
@@ -50,11 +53,10 @@ function CreateSubscriptionContent() {
       // Convert interval to seconds
       const intervalSecs = convertIntervalToSeconds(formData.interval);
       
-      // Use the connected wallet instead of a mock keypair
-      // Call contract service
+      // Use the currentWallet instead
       const result = await createSubscription(
         suiClient,
-        { signAndExecuteTransactionBlock }, // Pass the signAndExecuteTransactionBlock function
+        currentWallet, // Pass the current wallet which has signAndExecuteTransactionBlock
         formData.merchantAddress,
         amountMist,
         intervalSecs

@@ -1,6 +1,5 @@
-import { SuiClient } from '@mysten/sui.js/client';
+import { SuiClient } from '@mysten/sui/client';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
-import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 import type { WalletAccount } from '@mysten/wallet-standard';
 
 // Replace with your actual contract IDs after deployment
@@ -20,16 +19,36 @@ export interface SubscriptionData {
 }
 
 /**
+ * Validates that wallet is connected before executing a transaction
+ */
+function validateWallet(wallet: any): void {
+  if (!wallet) {
+    throw new Error('Wallet not connected. Please connect your wallet first.');
+  }
+  
+  if (!wallet.accounts || wallet.accounts.length === 0) {
+    throw new Error('No account found in wallet. Please connect your wallet properly.');
+  }
+  
+  if (!wallet.signAndExecuteTransactionBlock) {
+    throw new Error('Wallet does not support transaction signing. Please use a compatible wallet.');
+  }
+}
+
+/**
  * Creates a new subscription
  */
 export async function createSubscription(
   suiClient: SuiClient,
-  wallet: any, // Accept wallet object from dapp-kit
+  wallet: any,
   merchantAddress: string,
   amount: number,
   intervalSecs: number
 ) {
   try {
+    // Validate wallet connection
+    validateWallet(wallet);
+    
     const tx = new TransactionBlock();
     
     // Call the create_subscription function

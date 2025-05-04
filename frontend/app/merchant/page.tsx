@@ -52,7 +52,16 @@ function MerchantDashboardContent() {
 
   useEffect(() => {
     async function fetchData() {
-      if (!connected || !currentWallet) return;
+      if (!connected || !currentWallet) {
+        setLoading(false);
+        return;
+      }
+      
+      if (!currentWallet.accounts || currentWallet.accounts.length === 0) {
+        setError('No account found in wallet. Please reconnect your wallet.');
+        setLoading(false);
+        return;
+      }
       
       try {
         setLoading(true);
@@ -90,6 +99,14 @@ function MerchantDashboardContent() {
 
     fetchData();
   }, [currentWallet, suiClient, connected]);
+  
+  // Reload data when wallet connects
+  useEffect(() => {
+    if (connected && currentWallet?.accounts?.length > 0) {
+      setLoading(true);
+      setError(null);
+    }
+  }, [connected, currentWallet]);
   
   if (!connected) {
     return (
