@@ -3,9 +3,7 @@ module subscription_protocol::registry {
     use sui::tx_context::{Self, TxContext};
     use sui::transfer;
     use sui::table::{Self, Table};
-    use sui::vec_set::{Self, VecSet};
-    use sui::dynamic_object_field as dof;
-    use sui::vector;
+    use std::vector;
     use subscription_protocol::subscription::{Self, Subscription};
 
     // Error codes
@@ -17,6 +15,8 @@ module subscription_protocol::registry {
     struct Registry has key {
         id: UID,
         admin: address,
+        merchant_subscriptions: Table<address, vector<ID>>,
+        subscriber_subscriptions: Table<address, vector<ID>>
     }
     
     // Capability to manage the registry
@@ -31,6 +31,8 @@ module subscription_protocol::registry {
         let registry = Registry {
             id: object::new(ctx),
             admin,
+            merchant_subscriptions: table::new(ctx),
+            subscriber_subscriptions: table::new(ctx)
         };
         
         let admin_cap = AdminCap {
@@ -48,32 +50,32 @@ module subscription_protocol::registry {
     public fun register_subscription(
         registry: &mut Registry, 
         subscription: &Subscription,
-        ctx: &mut TxContext
+        _ctx: &mut TxContext
     ) {
         let subscriber = subscription::get_subscriber(subscription);
         let merchant = subscription::get_merchant(subscription);
         let subscription_id = object::id(subscription);
         
-        // Create merchant set if it doesn't exist
-        if (!dof::exists_(&registry.id, merchant)) {
-            dof::add(&mut registry.id, merchant, vec_set::empty<ID>());
+        // Create merchant entry if it doesn't exist
+        if (!table::contains(&registry.merchant_subscriptions, merchant)) {
+            table::add(&mut registry.merchant_subscriptions, merchant, vector::empty<ID>());
         };
         
-        // Create subscriber set if it doesn't exist
-        if (!dof::exists_(&registry.id, subscriber)) {
-            dof::add(&mut registry.id, subscriber, vec_set::empty<ID>());
+        // Create subscriber entry if it doesn't exist
+        if (!table::contains(&registry.subscriber_subscriptions, subscriber)) {
+            table::add(&mut registry.subscriber_subscriptions, subscriber, vector::empty<ID>());
         };
         
-        // Add subscription to merchant's set
-        let merchant_subs: &mut VecSet<ID> = dof::borrow_mut(&mut registry.id, merchant);
-        if (!vec_set::contains(merchant_subs, &subscription_id)) {
-            vec_set::insert(merchant_subs, subscription_id);
+        // Add subscription to merchant's list
+        let merchant_subs = table::borrow_mut(&mut registry.merchant_subscriptions, merchant);
+        if (!vector::contains(merchant_subs, &subscription_id)) {
+            vector::push_back(merchant_subs, subscription_id);
         };
         
-        // Add subscription to subscriber's set
-        let subscriber_subs: &mut VecSet<ID> = dof::borrow_mut(&mut registry.id, subscriber);
-        if (!vec_set::contains(subscriber_subs, &subscription_id)) {
-            vec_set::insert(subscriber_subs, subscription_id);
+        // Add subscription to subscriber's list
+        let subscriber_subs = table::borrow_mut(&mut registry.subscriber_subscriptions, subscriber);
+        if (!vector::contains(subscriber_subs, &subscription_id)) {
+            vector::push_back(subscriber_subs, subscription_id);
         };
     }
     
@@ -81,25 +83,27 @@ module subscription_protocol::registry {
     public fun unregister_subscription(
         registry: &mut Registry, 
         subscription: &Subscription,
-        ctx: &mut TxContext
+        _ctx: &mut TxContext
     ) {
         let subscriber = subscription::get_subscriber(subscription);
         let merchant = subscription::get_merchant(subscription);
         let subscription_id = object::id(subscription);
         
-        // Remove from merchant's set if it exists
-        if (dof::exists_(&registry.id, merchant)) {
-            let merchant_subs: &mut VecSet<ID> = dof::borrow_mut(&mut registry.id, merchant);
-            if (vec_set::contains(merchant_subs, &subscription_id)) {
-                vec_set::remove(merchant_subs, &subscription_id);
+        // Remove from merchant's list if it exists
+        if (table::contains(&registry.merchant_subscriptions, merchant)) {
+            let merchant_subs = table::borrow_mut(&mut registry.merchant_subscriptions, merchant);
+            let (found, index) = vector::index_of(merchant_subs, &subscription_id);
+            if (found) {
+                vector::remove(merchant_subs, index);
             };
         };
         
-        // Remove from subscriber's set if it exists
-        if (dof::exists_(&registry.id, subscriber)) {
-            let subscriber_subs: &mut VecSet<ID> = dof::borrow_mut(&mut registry.id, subscriber);
-            if (vec_set::contains(subscriber_subs, &subscription_id)) {
-                vec_set::remove(subscriber_subs, &subscription_id);
+        // Remove from subscriber's list if it exists
+        if (table::contains(&registry.subscriber_subscriptions, subscriber)) {
+            let subscriber_subs = table::borrow_mut(&mut registry.subscriber_subscriptions, subscriber);
+            let (found, index) = vector::index_of(subscriber_subs, &subscription_id);
+            if (found) {
+                vector::remove(subscriber_subs, index);
             };
         };
     }
@@ -109,12 +113,11 @@ module subscription_protocol::registry {
         registry: &Registry, 
         merchant: address
     ): vector<ID> {
-        if (!dof::exists_(&registry.id, merchant)) {
+        if (!table::contains(&registry.merchant_subscriptions, merchant)) {
             return vector::empty<ID>()
         };
         
-        let merchant_subs: &VecSet<ID> = dof::borrow(&registry.id, merchant);
-        vec_set::into_keys(*merchant_subs)
+        *table::borrow(&registry.merchant_subscriptions, merchant)
     }
     
     // Get all subscription IDs for a subscriber
@@ -122,11 +125,10 @@ module subscription_protocol::registry {
         registry: &Registry, 
         subscriber: address
     ): vector<ID> {
-        if (!dof::exists_(&registry.id, subscriber)) {
+        if (!table::contains(&registry.subscriber_subscriptions, subscriber)) {
             return vector::empty<ID>()
         };
         
-        let subscriber_subs: &VecSet<ID> = dof::borrow(&registry.id, subscriber);
-        vec_set::into_keys(*subscriber_subs)
+        *table::borrow(&registry.subscriber_subscriptions, subscriber)
     }
 } 

@@ -52,7 +52,7 @@ module subscription_protocol::payment_executor {
     ) {
         // Only process if payment is due
         if (subscription::is_payment_due(subscription, clock)) {
-            let amount = subscription::get_details(subscription).2;
+            let (_, _, amount, _, _, _, _) = subscription::get_details(subscription);
             
             // Check if payment has enough balance
             if (coin::value(payment) >= amount) {

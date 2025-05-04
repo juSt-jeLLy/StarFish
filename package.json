@@ -1,0 +1,27 @@
+{
+  "name": "starfish",
+  "version": "1.0.0",
+  "description": "A subscription-based payment protocol on the Sui blockchain, allowing users to authorize recurring payments to service providers.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/juSt-jeLLy/StarFish.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/juSt-jeLLy/StarFish/issues"
+  },
+  "homepage": "https://github.com/juSt-jeLLy/StarFish#readme",
+  "dependencies": {
+    "@mysten/sui": "^1.29.1",
+    "@mysten/sui.js": "^0.54.1",
+    "dotenv": "^16.5.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}

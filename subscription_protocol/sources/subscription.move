@@ -13,7 +13,7 @@ module subscription_protocol::subscription {
     const ENoPaymentDue: u64 = 4;
     
     // Define subscription status
-    struct SubscriptionStatus has drop, copy {
+    struct SubscriptionStatus has drop, copy, store {
         active: bool,
         paused: bool,
         trial: bool,
