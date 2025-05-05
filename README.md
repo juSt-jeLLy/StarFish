@@ -1,104 +1,118 @@
-# Sui Recurring Payments Protocol
+# StarFish - Subscription Payment Protocol on Sui Blockchain
 
-A subscription-based payment protocol on the Sui blockchain, allowing users to authorize recurring payments to service providers.
+StarFish is a decentralized subscription payment protocol built on the Sui blockchain, enabling automated recurring payments between users and service providers. The protocol is currently deployed on Sui Testnet.
 
-## Features
+![StarFish](https://img.shields.io/badge/StarFish-Subscription%20Protocol-blue)
+![Sui](https://img.shields.io/badge/Blockchain-Sui-5FC9F8)
+![Status](https://img.shields.io/badge/Status-Testnet-orange)
 
-- Create subscriptions with customizable intervals (daily, weekly, monthly, quarterly, yearly)
-- Auto-payment execution through permissioned transactions
-- Subscription management dashboard for users
-- Pause, resume, and cancel subscription functionality
+## 🌟 Features
 
-## Architecture
+- **Flexible Subscription Plans**: Create subscriptions with customizable intervals (daily, weekly, monthly, quarterly, yearly)
+- **Automated Payments**: Set up recurring payments that execute automatically at defined intervals
+- **User Control**: Pause, resume, or cancel subscriptions at any time
+- **Merchant Dashboard**: Track and manage subscription revenue streams
+- **Secure Transactions**: All payment authorizations are secured by the Sui blockchain
+
+## 🏗️ Architecture
 
 The project consists of two main components:
 
 1. **Smart Contracts (Sui Move)** - Located in `subscription_protocol/`
-   - Handles subscription creation, management, and payment execution
-   - Secure authorization mechanisms for recurring payments
-   - Registry of all active subscriptions
+   - Secure subscription management and payment execution
+   - On-chain subscription registry
+   - Permission-based payment authorization
 
 2. **Frontend (Next.js)** - Located in `frontend/`
    - User-friendly interface for creating and managing subscriptions
-   - Merchant dashboard for tracking subscriptions
-   - Integration with Sui wallet for transaction signing
+   - Integration with Sui wallets
+   - Responsive design for all devices
 
-## Setup Instructions
+## 🚀 Deployment Status
+
+- **Network**: Sui Testnet
+- **Package ID**: `0x49e2048033e8bde89359214ccbf916dffb68f44e917f0898d72c879a18f595a3`
+- **Registry ID**: `0xddda7d8b49a096f046686232b8156e782c820205e195ea794a94c7d33877163c`
+
+## 🔧 Setup Instructions
 
 ### Prerequisites
 
 - Node.js v18+
-- Rust (stable)
 - Sui CLI
-
-### Smart Contract Setup
-
-1. Install Sui CLI if you haven't already:
-```bash
-cargo install --locked --git https://github.com/MystenLabs/sui.git --branch main sui
-   ```
-
-2. Build the smart contract:
-   ```bash
-cd subscription_protocol
-sui move build
-   ```
+- A Sui wallet with testnet SUI tokens
 
 ### Frontend Setup
 
-1. Install dependencies:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/StarFish.git
+   cd StarFish
+   ```
+
+2. Install dependencies:
    ```bash
    cd frontend
    npm install
    ```
 
-2. Create a `.env.local` file:
+3. Create a `.env.local` file in the frontend directory:
    ```
-   PACKAGE_ID=0x...  # This will be filled when you deploy
+   NEXT_PUBLIC_NETWORK=testnet
+   NEXT_PUBLIC_PACKAGE_ID=0x49e2048033e8bde89359214ccbf916dffb68f44e917f0898d72c879a18f595a3
+   NEXT_PUBLIC_REGISTRY_ID=0xddda7d8b49a096f046686232b8156e782c820205e195ea794a94c7d33877163c
    ```
 
-3. Start the development server:
+4. Start the development server:
    ```bash
    npm run dev
    ```
 
-## Deployment
+5. Open [http://localhost:3000](http://localhost:3000) to view the application
 
-### Deploy Smart Contract
+### Smart Contract Development (Optional)
 
-1. Create a `.env` file in the root directory:
-   ```
-   DEPLOYER_PRIVATE_KEY=your_private_key_base64
-   ```
-
-2. Deploy to testnet:
+1. Install Sui CLI if you haven't already:
    ```bash
-   cd frontend
-   npm run deploy:testnet
+   cargo install --locked --git https://github.com/MystenLabs/sui.git --branch main sui
    ```
 
-3. Deploy to other networks:
+2. Build the smart contract:
    ```bash
-   npm run deploy:devnet
-   npm run deploy:mainnet
-   npm run deploy:local
+   cd subscription_protocol
+   sui move build
    ```
 
-## Usage
+## 🔍 Usage Guide
 
 ### Creating a Subscription
 
-1. Connect your wallet using the "Connect Wallet" button
-2. Navigate to the "Create Subscription" page
-3. Enter the merchant address, payment amount, and interval
+1. Connect your Sui wallet
+2. Navigate to "Create Subscription"
+3. Enter merchant address, payment amount, and interval
 4. Confirm the transaction in your wallet
 
 ### Managing Subscriptions
 
-1. Navigate to the "My Subscriptions" page
+1. Navigate to "My Subscriptions"
 2. View all your active subscriptions
-3. Pause, resume, or cancel subscriptions as needed
+3. Use the controls to pause, resume, or cancel any subscription
 
-## License
+## 🧪 Testing
+
+To run the frontend tests:
+```bash
+cd frontend
+npm test
+```
+
+## 📦 Building for Production
+
+```bash
+cd frontend
+npm run build
+```
+
+## 📄 License
 
 MIT 
