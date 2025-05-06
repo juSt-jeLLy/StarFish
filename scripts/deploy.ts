@@ -99,9 +99,12 @@ async function main() {
     console.log(`Gas used: ${result.effects?.gasUsed.computationCost} MIST`);
 
     // Find the package ID from the created objects
-    const packageId = result.objectChanges?.find(
+    const publishedChange = result.objectChanges?.find(
       (change: any) => change.type === 'published'
-    )?.packageId;
+    );
+    
+    // Use type assertion to access packageId
+    const packageId = publishedChange ? (publishedChange as any).packageId : undefined;
 
     if (packageId) {
       console.log(`\nPackage ID: ${packageId}`);

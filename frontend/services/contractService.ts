@@ -3,9 +3,13 @@ import { TransactionBlock } from '@mysten/sui.js/transactions';
 import type { WalletAccount } from '@mysten/wallet-standard';
 import { isSlushWallet, executeSlushTransaction } from './slushWalletAdapter';
 
-// Replace with your actual contract IDs after deployment
-const PACKAGE_ID = '0x177d14d5f5ac73f35fef5c9667566a0d8947386b59c93f1aa3219299e68ba381'; // Replace with your deployed package ID
-const REGISTRY_ID = '0x1c94bd91d5b1cda4988e91b2e11b01af59858e2d286076b2bd08a9568d754c43'; // Replace with your deployed registry object ID
+// Hard-code the contract IDs directly (updated to the correct IDs)
+const PACKAGE_ID = '0x437ccdb5c5fe77b78def7443793ce32c449feff41c15d4fe327619f5d1226d2e';
+const REGISTRY_ID = '0xc4b12ce21d6175b9cdadc2678dd96cff144c432ac56669de6c619ccb76c0c2b1';
+
+// Log the IDs being used
+console.log(`Using Package ID: ${PACKAGE_ID}`);
+console.log(`Using Registry ID: ${REGISTRY_ID}`);
 
 export interface SubscriptionData {
   id: string;
@@ -36,74 +40,89 @@ function validateWallet(wallet: any): void {
  * Executes a transaction using the connected wallet - handles various wallet implementations
  */
 async function executeTransaction(wallet: any, tx: TransactionBlock, options = { showEffects: true, showObjectChanges: true }) {
-  validateWallet(wallet);
+  console.group('🔍 DEBUG: executeTransaction');
   
-  // Check if it's Slush wallet first
-  if (isSlushWallet(wallet)) {
-    console.log('Detected Slush wallet, using Slush adapter');
-    return executeSlushTransaction(wallet, tx, options);
-  }
-  
-  // Get supported features from wallet
-  const walletName = wallet.name || 'Unknown Wallet';
-  console.log(`Using wallet: ${walletName}`);
-  
-  if (wallet.accounts && wallet.accounts.length > 0) {
-    console.log(`Wallet address: ${wallet.accounts[0].address}`);
-  }
-  
-  // Log available methods on the wallet
-  const methods = Object.getOwnPropertyNames(wallet)
-    .filter(prop => typeof wallet[prop] === 'function')
-    .join(', ');
-  console.log(`Wallet methods: ${methods}`);
-  
-  // Different wallets have different interfaces for signing transactions
   try {
-    // For Sui Wallet and most standard wallets
-    if (typeof wallet.signAndExecuteTransactionBlock === 'function') {
-      console.log('Using standard signAndExecuteTransactionBlock method');
-      const result = await wallet.signAndExecuteTransactionBlock({
-        transactionBlock: tx,
-        options,
-      });
-      console.log('Transaction signed and executed successfully');
+    validateWallet(wallet);
+    
+    // Check if it's Slush wallet first
+    if (isSlushWallet(wallet)) {
+      console.log('🔹 Detected Slush wallet, using Slush adapter');
+      const result = await executeSlushTransaction(wallet, tx, options);
+      console.log('✅ Slush transaction executed successfully');
+      console.groupEnd();
       return result;
     }
     
-    // For wallets with custom adapters
-    else if (wallet.adapter && typeof wallet.adapter.signAndExecuteTransaction === 'function') {
-      console.log('Using adapter.signAndExecuteTransaction method');
-      const result = await wallet.adapter.signAndExecuteTransaction(tx);
-      console.log('Transaction signed and executed successfully via adapter');
-      return result;
+    // Get supported features from wallet
+    const walletName = wallet.name || 'Unknown Wallet';
+    console.log(`🔹 Using wallet: ${walletName}`);
+    
+    if (wallet.accounts && wallet.accounts.length > 0) {
+      console.log(`🔹 Wallet address: ${wallet.accounts[0].address}`);
     }
     
-    // For wallets that expose signTransaction
-    else if (typeof wallet.signTransaction === 'function') {
-      console.log('Using signTransaction method');
-      const result = await wallet.signTransaction(tx);
-      console.log('Transaction signed successfully');
-      return result;
+    // Log available methods on the wallet
+    const methods = Object.getOwnPropertyNames(wallet)
+      .filter(prop => typeof wallet[prop] === 'function')
+      .join(', ');
+    console.log(`🔹 Wallet methods: ${methods}`);
+    
+    // Different wallets have different interfaces for signing transactions
+    try {
+      // For Sui Wallet and most standard wallets
+      if (typeof wallet.signAndExecuteTransactionBlock === 'function') {
+        console.log('🔹 Using standard signAndExecuteTransactionBlock method');
+        const result = await wallet.signAndExecuteTransactionBlock({
+          transactionBlock: tx,
+          options,
+        });
+        console.log('✅ Transaction signed and executed successfully');
+        console.groupEnd();
+        return result;
+      }
+      
+      // For wallets with custom adapters
+      else if (wallet.adapter && typeof wallet.adapter.signAndExecuteTransaction === 'function') {
+        console.log('🔹 Using adapter.signAndExecuteTransaction method');
+        const result = await wallet.adapter.signAndExecuteTransaction(tx);
+        console.log('✅ Transaction signed and executed successfully via adapter');
+        console.groupEnd();
+        return result;
+      }
+      
+      // For wallets that expose signTransaction
+      else if (typeof wallet.signTransaction === 'function') {
+        console.log('🔹 Using signTransaction method');
+        const result = await wallet.signTransaction(tx);
+        console.log('✅ Transaction signed successfully');
+        console.groupEnd();
+        return result;
+      }
+      
+      // If none of these methods exist, wallet isn't compatible
+      throw new Error(`Wallet ${walletName} doesn't support any known transaction signing methods. Available methods: ${methods}`);
+    } catch (error: any) {
+      console.error('❌ Transaction signing error:', error);
+      
+      // Try to extract useful information from the error
+      let errorMessage = error.message || 'Unknown error';
+      
+      if (error.code) {
+        console.error(`❌ Error code: ${error.code}`);
+      }
+      
+      if (error.data) {
+        console.error('❌ Error data:', error.data);
+      }
+      
+      console.groupEnd();
+      throw new Error(`Failed to sign transaction with ${walletName}: ${errorMessage}`);
     }
-    
-    // If none of these methods exist, wallet isn't compatible
-    throw new Error(`Wallet ${walletName} doesn't support any known transaction signing methods. Available methods: ${methods}`);
-  } catch (error: any) {
-    console.error('Transaction signing error:', error);
-    
-    // Try to extract useful information from the error
-    let errorMessage = error.message || 'Unknown error';
-    
-    if (error.code) {
-      console.error(`Error code: ${error.code}`);
-    }
-    
-    if (error.data) {
-      console.error('Error data:', error.data);
-    }
-    
-    throw new Error(`Failed to sign transaction with ${walletName}: ${errorMessage}`);
+  } catch (error) {
+    console.error('❌ Error in executeTransaction:', error);
+    console.groupEnd();
+    throw error;
   }
 }
 
@@ -115,19 +134,40 @@ export async function createSubscription(
   wallet: any,
   merchantAddress: string,
   amount: number,
-  intervalSecs: number
+  intervalSecs: number,
+  maxPayments: number = 12 // Add optional maxPayments parameter with default value
 ) {
   try {
-    console.log('Creating subscription with the following parameters:');
+    // START OF DEBUG LOGGING
+    console.group('🔍 DEBUG: createSubscription');
+    console.log('🔹 Got parameters:');
     console.log(`- Package ID: ${PACKAGE_ID}`);
-    console.log(`- Registry ID: ${REGISTRY_ID} (not used directly in function call)`);
+    console.log(`- Registry ID: ${REGISTRY_ID}`);
     console.log(`- Merchant Address: ${merchantAddress}`);
     console.log(`- Amount (MIST): ${amount}`);
     console.log(`- Amount (SUI): ${amount / 1_000_000_000}`);
     console.log(`- Interval (seconds): ${intervalSecs}`);
-    console.log(`- Wallet:`, wallet ? wallet.name : 'Unknown');
+    console.log(`- Max Payments: ${maxPayments}`);
     
-    // Validate merchant address format
+    if (wallet) {
+      console.log('🔹 Wallet info:');
+      console.log(`- Name: ${wallet.name || 'Unknown'}`);
+      console.log(`- Has accounts: ${!!(wallet.accounts && wallet.accounts.length > 0)}`);
+      if (wallet.accounts && wallet.accounts.length > 0) {
+        console.log(`- First account address: ${wallet.accounts[0].address}`);
+      }
+    } else {
+      console.error('❌ No wallet provided!');
+    }
+    
+    if (suiClient) {
+      console.log('🔹 SuiClient provided: ✅');
+    } else {
+      console.error('❌ No SuiClient provided!');
+    }
+    // END OF DEBUG LOGGING
+    
+    // Normal logic - validate merchant address format
     if (!merchantAddress || !merchantAddress.startsWith('0x')) {
       throw new Error('Invalid merchant address format. It must start with 0x');
     }
@@ -139,9 +179,11 @@ export async function createSubscription(
 
     // Create transaction block
     const tx = new TransactionBlock();
-    console.log('Building transaction block...');
+    console.log('🔹 Building transaction block...');
     
     // Call the create_subscription function with the correct parameters
+    console.log(`🔹 Calling ${PACKAGE_ID}::subscription::create_subscription`);
+    
     // Based on contract inspection, the function expects:
     // merchant_address, amount, interval_secs, clock
     tx.moveCall({
@@ -154,22 +196,24 @@ export async function createSubscription(
       ],
     });
     
-    console.log('Transaction block built successfully');
-    console.log('Executing transaction...');
+    console.log('🔹 Transaction block built successfully');
+    console.log('🔹 Executing transaction...');
     
     // Use our universal transaction execution function
     const result = await executeTransaction(wallet, tx);
     
-    console.log('Transaction executed successfully:', result);
+    console.log('✅ Transaction executed successfully:', result);
+    console.groupEnd();
     
     // Check for key properties in the result
     if (!result.digest) {
-      console.warn('Transaction result missing digest. This may indicate an issue:', result);
+      console.warn('⚠️ Transaction result missing digest. This may indicate an issue:', result);
     }
     
     return result;
   } catch (error) {
-    console.error('Error creating subscription:', error);
+    console.error('❌ Error creating subscription:', error);
+    console.groupEnd();
     throw error;
   }
 }

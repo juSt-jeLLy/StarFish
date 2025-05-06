@@ -3,118 +3,67 @@
 import { useCurrentWallet } from '@mysten/dapp-kit';
 import { useEffect, useState } from 'react';
 import { isSlushWallet } from '../services/slushWalletAdapter';
-import { debugWalletCapabilities } from '../services/debugWallet';
-import { useWallet, WALLET_CONNECTION_EVENT } from '../services/walletContext';
+import { useWallet, WALLET_CONNECTION_EVENT, WALLET_RECONNECT_EVENT } from '../services/walletContext';
 
 const WalletStatus = () => {
   const { currentWallet } = useCurrentWallet();
-  const { isConnected, walletAddress, walletName, isSlush: contextIsSlush } = useWallet();
+  const { 
+    isConnected, 
+    walletAddress, 
+    walletName, 
+    isSlush: contextIsSlush, 
+    refreshPage,
+    hasError,
+    errorMessage,
+    isTestnet 
+  } = useWallet();
+  
   const [showStatus, setShowStatus] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
-  const [walletInfo, setWalletInfo] = useState<string | null>(null);
   const [errorState, setErrorState] = useState(false);
-  const [isSlush, setIsSlush] = useState(false);
-  
-  // Debug wallet features when wallet changes
+  const [reconnecting, setReconnecting] = useState(false);
+
+  // Update status when wallet context has errors
   useEffect(() => {
-    if (currentWallet) {
-      console.log('Connected wallet:', currentWallet.name);
-      
-      // Check if it's Slush wallet
-      const slushDetected = isSlushWallet(currentWallet);
-      setIsSlush(slushDetected);
-      
-      // Get comprehensive debug info
-      const debugInfo = debugWalletCapabilities(currentWallet);
-      setWalletInfo(debugInfo);
-      console.log(debugInfo);
-      
-      // Check for transaction signing features using safer type checking
-      const hasSignAndExecute = typeof (currentWallet as any).signAndExecuteTransactionBlock === 'function';
-      const features = (currentWallet as any).features;
-      const hasFeatures = features && typeof features === 'object';
-      
-      // Check if wallet has signing capabilities
-      let hasSigningCapability = hasSignAndExecute;
-      
-      if (hasFeatures) {
-        try {
-          // Try to check for specific features
-          hasSigningCapability = hasSigningCapability || 
-                               (features['sui:signTransactionBlock'] != null);
-        } catch (e) {
-          console.error('Error checking wallet features:', e);
-        }
-      }
-      
-      // Extra check for Slush wallet
-      if (slushDetected) {
-        hasSigningCapability = true; // We'll use our custom adapter for Slush
-      }
-      
-      if (!hasSigningCapability) {
-        setErrorState(true);
-        setStatusMessage('Warning: This wallet may not support transaction signing');
-        setShowStatus(true);
-      } else {
-        const address = currentWallet.accounts[0]?.address;
-        const walletLabel = slushDetected ? 'Slush' : currentWallet.name?.split(' ')[0] || 'Wallet';
-        setStatusMessage(`Connected: ${walletLabel} ${address?.slice(0, 6)}...${address?.slice(-4)}`);
-        setErrorState(false);
-        setShowStatus(true);
-        
-        // Hide success message after a delay
-        const timer = setTimeout(() => {
-          setShowStatus(false);
-        }, 5000);
-        
-        return () => clearTimeout(timer);
-      }
-    } else {
-      // Try to restore from local storage if currentWallet is not available
-      if (typeof window !== 'undefined') {
-        const savedWalletConnected = localStorage.getItem('walletConnected');
-        const savedAddress = localStorage.getItem('walletAddress');
-        const savedName = localStorage.getItem('walletName');
-        
-        if (savedWalletConnected === 'true' && savedAddress && savedName) {
-          // We might be in a state where the wallet is connected but dapp-kit hasn't initialized it yet
-          console.log('Wallet not available yet, but found in localStorage');
-          return;
-        }
-      }
-      
-      setStatusMessage('Wallet disconnected');
+    if (hasError && errorMessage) {
+      setStatusMessage(errorMessage);
       setErrorState(true);
       setShowStatus(true);
-      setWalletInfo(null);
-      setIsSlush(false);
+    } else if (isConnected && walletAddress) {
+      const networkStatus = isTestnet ? 'Testnet' : 'Unknown Network';
+      setStatusMessage(`Connected: ${walletName} (${networkStatus})`);
+      setErrorState(false);
+      setShowStatus(true);
       
-      // Hide warning after a delay
+      // Hide success message after delay
       const timer = setTimeout(() => {
         setShowStatus(false);
       }, 3000);
       
       return () => clearTimeout(timer);
     }
-  }, [currentWallet]);
+  }, [hasError, errorMessage, isConnected, isTestnet, walletName, walletAddress]);
   
   // Listen for wallet connection events
   useEffect(() => {
     const handleWalletConnection = (event: Event) => {
       const customEvent = event as CustomEvent;
+      
       if (customEvent.detail.connected) {
         // Display connection status
-        const address = customEvent.detail.address;
         const name = customEvent.detail.name || 'Wallet';
-        setStatusMessage(`Connected: ${name} ${address?.slice(0, 6)}...${address?.slice(-4)}`);
+        const isTestnet = customEvent.detail.isTestnet;
+        const networkStatus = isTestnet ? 'Testnet' : 'Unknown Network';
+        
+        setStatusMessage(`Connected: ${name} (${networkStatus})`);
         setErrorState(false);
         setShowStatus(true);
+        setReconnecting(false);
         
         // Hide success message after a delay
         const timer = setTimeout(() => {
           setShowStatus(false);
-        }, 5000);
+        }, 3000);
         
         return () => clearTimeout(timer);
       } else {
@@ -130,38 +79,80 @@ const WalletStatus = () => {
         return () => clearTimeout(timer);
       }
     };
+    
+    const handleWalletReconnect = () => {
+      setStatusMessage('Reconnecting wallet...');
+      setErrorState(false);
+      setShowStatus(true);
+      setReconnecting(true);
+    };
 
     window.addEventListener(WALLET_CONNECTION_EVENT, handleWalletConnection);
+    window.addEventListener(WALLET_RECONNECT_EVENT, handleWalletReconnect);
     
     return () => {
       window.removeEventListener(WALLET_CONNECTION_EVENT, handleWalletConnection);
+      window.removeEventListener(WALLET_RECONNECT_EVENT, handleWalletReconnect);
     };
   }, []);
-  
-  const handleDebugClick = () => {
-    if (walletInfo) {
-      console.log(walletInfo);
-      alert(walletInfo);
-    }
-  };
-  
-  // Don't render anything if we're not showing status
-  if (!showStatus && !errorState) return null;
-  
+
+  // Only render if there's a status to show
+  if (!showStatus) return null;
+
   return (
-    <div className={`fixed bottom-4 right-4 p-3 rounded-lg shadow-lg z-50 ${
-      errorState ? 'bg-red-100 text-red-800' : 
-      isSlush ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
-    }`}>
-      <p className="font-medium">{statusMessage}</p>
-      {walletInfo && (
-        <button 
-          onClick={handleDebugClick}
-          className="text-xs underline mt-1"
-        >
-          Debug wallet info
-        </button>
-      )}
+    <div className="fixed top-20 right-4 z-50 max-w-xs w-full">
+      <div 
+        className={`px-4 py-3 rounded shadow-lg ${
+          errorState 
+            ? 'bg-red-50 border border-red-200 text-red-700' 
+            : reconnecting
+              ? 'bg-yellow-50 border border-yellow-200 text-yellow-700'
+              : 'bg-green-50 border border-green-200 text-green-700'
+        }`}
+      >
+        <div className="flex items-start">
+          <div className="flex-shrink-0">
+            {errorState ? (
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            ) : reconnecting ? (
+              <svg className="h-5 w-5 text-yellow-400 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            ) : (
+              <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            )}
+          </div>
+          <div className="ml-3">
+            <p className="text-sm font-medium">
+              {statusMessage}
+            </p>
+          </div>
+          <div className="ml-auto pl-3">
+            <div className="-mx-1.5 -my-1.5">
+              <button
+                onClick={() => setShowStatus(false)}
+                className={`inline-flex rounded-md p-1.5 ${
+                  errorState 
+                    ? 'text-red-500 hover:bg-red-100 focus:bg-red-100' 
+                    : reconnecting
+                      ? 'text-yellow-500 hover:bg-yellow-100 focus:bg-yellow-100'
+                      : 'text-green-500 hover:bg-green-100 focus:bg-green-100'
+                }`}
+              >
+                <span className="sr-only">Dismiss</span>
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

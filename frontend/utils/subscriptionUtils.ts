@@ -1,7 +1,10 @@
 import { SuiClient } from '@mysten/sui/client';
 
-// Get package ID from contract service
-const PACKAGE_ID = '0x49e2048033e8bde89359214ccbf916dffb68f44e917f0898d72c879a18f595a3';
+// Hard-code the package ID directly (updated to the correct ID)
+const PACKAGE_ID = '0x437ccdb5c5fe77b78def7443793ce32c449feff41c15d4fe327619f5d1226d2e';
+
+// Log the package ID being used
+console.log(`SubscriptionUtils using Package ID: ${PACKAGE_ID}`);
 
 /**
  * Extracts a subscription ID from transaction results

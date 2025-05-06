@@ -227,6 +227,59 @@ function SubscriptionsContent() {
     }
   };
 
+  // Add a manual refresh function
+  const refreshSubscriptions = async () => {
+    if (!walletAddress || !suiClient) {
+      setError('No wallet address found. Please connect your wallet.');
+      setSubscriptions([]);
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      console.log(`Manually refreshing subscriptions for ${walletAddress}`);
+      const refreshedSubscriptions = await getSubscriptionsForSubscriber(suiClient, walletAddress);
+      console.log('Refreshed subscriptions:', refreshedSubscriptions);
+      setSubscriptions(refreshedSubscriptions);
+    } catch (err) {
+      console.error('Error refreshing subscriptions:', err);
+      setError(`Failed to load subscriptions: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setSubscriptions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Listen for wallet connection events
+  useEffect(() => {
+    const handleWalletEvent = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Wallet connection event received in subscriptions page', customEvent.detail);
+      
+      // Wait a short delay before refreshing data
+      setTimeout(() => {
+        if (customEvent.detail.connected) {
+          console.log('Wallet connected, refreshing subscription data');
+          refreshSubscriptions();
+        } else {
+          console.log('Wallet disconnected, clearing subscription data');
+          setSubscriptions([]);
+          setError('Please connect your wallet to view your subscriptions');
+        }
+      }, 500);
+    };
+    
+    // Listen for wallet connection events
+    window.addEventListener('wallet-connection-changed', handleWalletEvent);
+    
+    return () => {
+      window.removeEventListener('wallet-connection-changed', handleWalletEvent);
+    };
+  }, [walletAddress]);
+
   if (!connected) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">

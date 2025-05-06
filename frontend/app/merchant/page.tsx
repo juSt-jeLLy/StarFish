@@ -76,30 +76,30 @@ async function getMerchantSubscriptions(merchantAddress: string, suiClient: any)
     
     // If no stored subscriptions or none were valid, fall back to mock data
     console.log('No valid subscriptions found, returning mock data');
-    return [
-      {
-        id: '0x1234',
-        merchantAddress,
-        amount: '10000000000', // 10 SUI
-        token: 'SUI',
-        interval: 'monthly',
-        nextPayment: '2023-07-15',
-        status: 'active',
-        totalPaid: '3',
-        remainingPayments: 'N/A',
-      },
-      {
-        id: '0x5678',
-        merchantAddress,
-        amount: '5000000000', // 5 SUI
-        token: 'SUI',
-        interval: 'weekly',
-        nextPayment: '2023-07-08',
-        status: 'active',
-        totalPaid: '8',
-        remainingPayments: 'N/A',
-      },
-    ];
+  return [
+    {
+      id: '0x1234',
+      merchantAddress,
+      amount: '10000000000', // 10 SUI
+      token: 'SUI',
+      interval: 'monthly',
+      nextPayment: '2023-07-15',
+      status: 'active',
+      totalPaid: '3',
+      remainingPayments: 'N/A',
+    },
+    {
+      id: '0x5678',
+      merchantAddress,
+      amount: '5000000000', // 5 SUI
+      token: 'SUI',
+      interval: 'weekly',
+      nextPayment: '2023-07-08',
+      status: 'active',
+      totalPaid: '8',
+      remainingPayments: 'N/A',
+    },
+];
   } catch (err) {
     console.error('Error in getMerchantSubscriptions:', err);
     // Return mock data on error
@@ -292,7 +292,7 @@ function MerchantDashboardContent() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <div className="truncate max-w-[150px]">
                             <Link href={`/subscription/${subscription.id}`} className="text-blue-600 hover:underline">
-                              {subscription.id}
+                            {subscription.id}
                             </Link>
                           </div>
                         </td>

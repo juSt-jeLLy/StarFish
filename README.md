@@ -73,14 +73,14 @@ The project consists of two main components:
 ### Smart Contract Development (Optional)
 
 1. Install Sui CLI if you haven't already:
-   ```bash
-   cargo install --locked --git https://github.com/MystenLabs/sui.git --branch main sui
+```bash
+cargo install --locked --git https://github.com/MystenLabs/sui.git --branch main sui
    ```
 
 2. Build the smart contract:
    ```bash
-   cd subscription_protocol
-   sui move build
+cd subscription_protocol
+sui move build
    ```
 
 ## 🔍 Usage Guide
