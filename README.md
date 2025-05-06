@@ -31,8 +31,8 @@ The project consists of two main components:
 ## 🚀 Deployment Status
 
 - **Network**: Sui Testnet
-- **Package ID**: `0x49e2048033e8bde89359214ccbf916dffb68f44e917f0898d72c879a18f595a3`
-- **Registry ID**: `0xddda7d8b49a096f046686232b8156e782c820205e195ea794a94c7d33877163c`
+- **Package ID**: `0x437ccdb5c5fe77b78def7443793ce32c449feff41c15d4fe327619f5d1226d2e`
+- **Registry ID**: `0xc4b12ce21d6175b9cdadc2678dd96cff144c432ac56669de6c619ccb76c0c2b1`
 
 ## 🔧 Setup Instructions
 
@@ -59,8 +59,8 @@ The project consists of two main components:
 3. Create a `.env.local` file in the frontend directory:
    ```
    NEXT_PUBLIC_NETWORK=testnet
-   NEXT_PUBLIC_PACKAGE_ID=0x49e2048033e8bde89359214ccbf916dffb68f44e917f0898d72c879a18f595a3
-   NEXT_PUBLIC_REGISTRY_ID=0xddda7d8b49a096f046686232b8156e782c820205e195ea794a94c7d33877163c
+   NEXT_PUBLIC_PACKAGE_ID=0x437ccdb5c5fe77b78def7443793ce32c449feff41c15d4fe327619f5d1226d2e
+   NEXT_PUBLIC_REGISTRY_ID=0xc4b12ce21d6175b9cdadc2678dd96cff144c432ac56669de6c619ccb76c0c2b1
    ```
 
 4. Start the development server:
