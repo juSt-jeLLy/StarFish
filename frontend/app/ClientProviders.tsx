@@ -36,7 +36,7 @@ export default function ClientProviders({ children }: { children: ReactNode }) {
         >
           <WalletContextProvider>
             <WalletStatus />
-            {children}
+          {children}
           </WalletContextProvider>
         </WalletProvider>
       </SuiClientProvider>

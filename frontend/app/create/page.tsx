@@ -131,37 +131,49 @@ function CreateSubscriptionContent() {
       setStatusMessage("Waiting for wallet approval...");
       console.log(`Creating subscription: ${formData.merchantAddress}, ${amountMist} MIST, ${intervalSecs} seconds, max payments: ${maxPayments}`);
       
-      // Call contract service
+      try {
+        // Call contract service
       const result = await createSubscription(
         suiClient,
         currentWallet,
         formData.merchantAddress,
         amountMist,
-        intervalSecs,
-        maxPayments
+          intervalSecs,
+          maxPayments
       );
       
-      console.log('Transaction successful:', result);
-      setStatusMessage("Transaction confirmed!");
+        console.log('Transaction successful:', result);
+        setStatusMessage("Transaction confirmed!");
       setTxResult(result);
       
-      // Store successful transaction in localStorage
+        // Store successful transaction in localStorage
       if (result && result.digest) {
         try {
-          const storedTxs = localStorage.getItem('subscriptionTransactions') || '[]';
-          const transactions = JSON.parse(storedTxs);
+            const storedTxs = localStorage.getItem('subscriptionTransactions') || '[]';
+            const transactions = JSON.parse(storedTxs);
           
           transactions.push({
             digest: result.digest,
-            timestamp: new Date().toISOString(),
-            merchant: formData.merchantAddress,
-            amount: formData.amount,
-            interval: formData.interval
+              timestamp: new Date().toISOString(),
+              merchant: formData.merchantAddress,
+              amount: formData.amount,
+              interval: formData.interval
           });
           
           localStorage.setItem('subscriptionTransactions', JSON.stringify(transactions));
         } catch (e) {
-          console.error('Error saving transaction:', e);
+            console.error('Error saving transaction:', e);
+          }
+        }
+      } catch (txErr: any) {
+        console.error('Transaction error:', txErr);
+        
+        if (txErr.message && txErr.message.includes('insufficient gas budget')) {
+          throw new Error('Transaction failed due to gas costs. This can happen when the network is congested. Please try again.');
+        } else if (txErr.message && txErr.message.includes('authority signature')) {
+          throw new Error('Wallet authentication failed. Please disconnect and reconnect your wallet.');
+        } else {
+          throw txErr; // Re-throw for the outer catch block to handle
         }
       }
     } catch (err: any) {
@@ -174,6 +186,10 @@ function CreateSubscriptionContent() {
         setError(`Slush wallet error: ${err.message}`);
       } else if (err.message && err.message.includes('Execution aborted')) {
         setError(`Contract error: ${err.message}`);
+      } else if (err.message && (err.message.includes('not found') || err.message.includes('404'))) {
+        setError(`Network error: The contract could not be found. Please ensure you're connected to the testnet.`);
+      } else if (err.message && err.message.includes('gas')) {
+        setError(`Gas error: ${err.message}. Try again when the network is less congested.`);
       } else {
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
       }
@@ -189,19 +205,45 @@ function CreateSubscriptionContent() {
     
     try {
       setIsSubmitting(true);
+      setError(null);
       setStatusMessage("Verifying subscription on blockchain...");
       
-      const subscriptionId = await extractSubscriptionId(suiClient, txDigest);
+      console.group('🔍 Verify Subscription');
+      console.log(`Transaction digest: ${txDigest}`);
       
-      if (subscriptionId) {
-        // Verify the object exists
-        const subscriptionObj = await suiClient.getObject({
-          id: subscriptionId,
-          options: { showContent: true }
-        });
+      // First attempt - immediate verification
+      let subscriptionId = await extractSubscriptionId(suiClient, txDigest);
+      
+      // If not found on first try, wait 2 seconds and retry (blockchain might need time)
+      if (!subscriptionId) {
+        console.log('Subscription not found on first attempt, waiting 2 seconds to retry...');
+        setStatusMessage("Waiting for blockchain confirmation...");
         
-        if (subscriptionObj.data?.content) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        subscriptionId = await extractSubscriptionId(suiClient, txDigest);
+      }
+      
+      // If still not found, try one last time after 3 more seconds
+      if (!subscriptionId) {
+        console.log('Subscription still not found, waiting 3 more seconds for final attempt...');
+        setStatusMessage("Transaction confirmed, but still locating subscription...");
+        
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        subscriptionId = await extractSubscriptionId(suiClient, txDigest);
+      }
+        
+        if (subscriptionId) {
+        console.log(`✅ Found subscription ID: ${subscriptionId}`);
+          
+        // Verify the object exists
+            const subscriptionObj = await suiClient.getObject({
+              id: subscriptionId,
+              options: { showContent: true }
+            });
+            
+            if (subscriptionObj.data?.content) {
           setStatusMessage(`Subscription verified! ID: ${subscriptionId}`);
+          console.log('Subscription object content:', subscriptionObj.data?.content);
           
           // Store in localStorage
           const storedSubs = localStorage.getItem('createdSubscriptions') || '[]';
@@ -210,16 +252,26 @@ function CreateSubscriptionContent() {
           subscriptions.push({
             id: subscriptionId,
             timestamp: new Date().toISOString(),
-            txDigest: txDigest
+            txDigest: txDigest,
+            merchant: formData.merchantAddress,
+            amount: formData.amount
           });
           
           localStorage.setItem('createdSubscriptions', JSON.stringify(subscriptions));
-        } else {
-          setError('Subscription object not found on the blockchain.');
+          console.log('Subscription saved to localStorage');
+            } else {
+          setError('Subscription object found but has no content. This might be a temporary issue.');
+          console.warn('Object found but has no content:', subscriptionObj);
         }
       } else {
-        setError('No subscription found in this transaction.');
+        setError('No subscription found in this transaction. The transaction may have succeeded, but we could not locate the subscription object.');
+        console.warn('Could not find subscription object in transaction');
+        
+        // Suggest the user check My Subscriptions page
+        setStatusMessage("Try checking the 'My Subscriptions' page to see if it appears there.");
       }
+      
+      console.groupEnd();
     } catch (error) {
       console.error('Error verifying subscription:', error);
       setError(`Verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -258,11 +310,11 @@ function CreateSubscriptionContent() {
   
   // Show transaction result
   if (txResult) {
-    return (
+  return (
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow-md">
           <h1 className="text-2xl font-bold mb-6">Subscription Created!</h1>
-          
+      
           <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-6">
             <p className="font-medium">Transaction Successful</p>
             <p className="text-sm">Your subscription has been created successfully.</p>
@@ -286,24 +338,37 @@ function CreateSubscriptionContent() {
             </div>
           </div>
           
-          <div className="flex space-x-4 justify-center">
-            <button
-              onClick={() => verifySubscription(txResult.digest)}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-              disabled={isSubmitting}
+          <div className="flex flex-wrap space-x-4 justify-center mb-4">
+            <a 
+              href={`https://suiexplorer.com/txblock/${txResult.digest}?network=testnet`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded mb-2 inline-flex items-center"
             >
-              {isSubmitting ? 'Verifying...' : 'Verify On-chain'}
-            </button>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+              </svg>
+                    View in Explorer
+            </a>
             
-            <button
+                  <button
+              onClick={() => verifySubscription(txResult.digest)}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded mb-2"
+                    disabled={isSubmitting}
+                  >
+              {isSubmitting ? 'Verifying...' : 'Verify On-chain'}
+                  </button>
+            
+                <button
               onClick={handleCreateAnother}
-              className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded"
-            >
+              className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded mb-2"
+                >
               Create Another
-            </button>
+                </button>
             
             <Link href="/subscriptions">
-              <span className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded inline-block">
+              <span className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded inline-block mb-2">
                 View My Subscriptions
               </span>
             </Link>
@@ -312,10 +377,10 @@ function CreateSubscriptionContent() {
           {statusMessage && (
             <div className="mt-4 text-center text-sm text-gray-600">
               {statusMessage}
-            </div>
+              </div>
           )}
           
-          {error && (
+                {error && (
             <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
               {error}
             </div>
@@ -335,111 +400,111 @@ function CreateSubscriptionContent() {
           <div className="mb-6 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded">
             <p className="font-medium">Connected Wallet: {walletName}</p>
             <p className="text-sm">{shortAddress}</p>
-          </div>
-        )}
-        
+                  </div>
+                )}
+                
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-gray-700 mb-2" htmlFor="merchantAddress">
-              Merchant Address
-            </label>
-            <input
-              type="text"
-              id="merchantAddress"
-              name="merchantAddress"
-              value={formData.merchantAddress}
-              onChange={handleChange}
+                    Merchant Address
+                  </label>
+                  <input
+                    type="text"
+                    id="merchantAddress"
+                    name="merchantAddress"
+                    value={formData.merchantAddress}
+                    onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
+                    required
+                  />
             <p className="text-xs text-gray-500 mt-1">
               The 0x address that will receive the subscription payments
             </p>
-          </div>
-          
+                </div>
+                
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
+                  <div>
               <label className="block text-gray-700 mb-2" htmlFor="amount">
                 Amount
-              </label>
-              <input
-                type="number"
-                id="amount"
-                name="amount"
-                value={formData.amount}
-                onChange={handleChange}
+                    </label>
+                    <input
+                      type="number"
+                      id="amount"
+                      name="amount"
+                      value={formData.amount}
+                      onChange={handleChange}
                 step="0.000000001"
                 min="0.000000001"
                 className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-            
-            <div>
+                      required
+                    />
+                  </div>
+                  
+                  <div>
               <label className="block text-gray-700 mb-2" htmlFor="token">
-                Token
-              </label>
-              <select
-                id="token"
-                name="token"
-                value={formData.token}
-                onChange={handleChange}
+                      Token
+                    </label>
+                    <select
+                      id="token"
+                      name="token"
+                      value={formData.token}
+                      onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="SUI">SUI</option>
-              </select>
-            </div>
-          </div>
-          
+                    >
+                      <option value="SUI">SUI</option>
+                    </select>
+                  </div>
+                </div>
+                
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div>
+                  <div>
               <label className="block text-gray-700 mb-2" htmlFor="interval">
                 Billing Interval
-              </label>
-              <select
-                id="interval"
-                name="interval"
-                value={formData.interval}
-                onChange={handleChange}
+                    </label>
+                    <select
+                      id="interval"
+                      name="interval"
+                      value={formData.interval}
+                      onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-              </select>
-            </div>
-            
-            <div>
+                    >
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="yearly">Yearly</option>
+                    </select>
+                  </div>
+                  
+                  <div>
               <label className="block text-gray-700 mb-2" htmlFor="maxPayments">
                 Max Payments
-              </label>
-              <input
-                type="number"
-                id="maxPayments"
-                name="maxPayments"
-                value={formData.maxPayments}
-                onChange={handleChange}
+                    </label>
+                    <input
+                      type="number"
+                      id="maxPayments"
+                      name="maxPayments"
+                      value={formData.maxPayments}
+                      onChange={handleChange}
                 min="1"
                 max="100"
                 className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
+                      required
+                    />
               <p className="text-xs text-gray-500 mt-1">
                 Maximum number of payments before auto-cancellation
               </p>
-            </div>
-          </div>
-          
+                  </div>
+                </div>
+                
           <div className="flex justify-center">
-            <button
-              type="submit"
+                  <button
+                    type="submit"
               className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded font-medium disabled:opacity-60 disabled:cursor-not-allowed"
               disabled={isSubmitting || !isConnected}
             >
               {isSubmitting ? 'Processing...' : 'Create Subscription'}
-            </button>
-          </div>
+                  </button>
+                </div>
         </form>
         
         {statusMessage && (
@@ -453,7 +518,7 @@ function CreateSubscriptionContent() {
             {error}
           </div>
         )}
-      </div>
+        </div>
     </div>
   );
 }

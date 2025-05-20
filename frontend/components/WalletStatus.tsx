@@ -22,7 +22,7 @@ const WalletStatus = () => {
   const [statusMessage, setStatusMessage] = useState('');
   const [errorState, setErrorState] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
-
+  
   // Update status when wallet context has errors
   useEffect(() => {
     if (hasError && errorMessage) {
@@ -95,10 +95,10 @@ const WalletStatus = () => {
       window.removeEventListener(WALLET_RECONNECT_EVENT, handleWalletReconnect);
     };
   }, []);
-
+  
   // Only render if there's a status to show
   if (!showStatus) return null;
-
+  
   return (
     <div className="fixed top-20 right-4 z-50 max-w-xs w-full">
       <div 
@@ -134,7 +134,7 @@ const WalletStatus = () => {
           </div>
           <div className="ml-auto pl-3">
             <div className="-mx-1.5 -my-1.5">
-              <button
+        <button 
                 onClick={() => setShowStatus(false)}
                 className={`inline-flex rounded-md p-1.5 ${
                   errorState 
@@ -148,7 +148,7 @@ const WalletStatus = () => {
                 <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
-              </button>
+        </button>
             </div>
           </div>
         </div>
